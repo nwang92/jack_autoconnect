@@ -27,6 +27,15 @@ private:
     // Our jack client handle
     jack_client_t* client;
 
+    // Main worker method that connects RegEx pairs
+    void connectRegex();
+
+    // Main worker method that connects JackTrip clients to a SuperCollider server
+    void connectJackTripSuperCollider();
+
+    // Main worker method that connects a Jamulus bridge client to a SuperCollider server
+    void connectJamulusSuperCollider();
+
     // returns auto incrementing number for each unique client
     int getClientNum(const QString& clientName);
 
@@ -37,9 +46,6 @@ signals:
 public slots:
     // Main worker method that iterates through all entries in connectionsToDo
     void doNewPort();
-
-    // Main worker method that connects JackTrip clients to SuperCollider server
-    void doNewPortJackTripSuperCollider();
 };
 
 #endif // JACKAUTOCONNECT_H
