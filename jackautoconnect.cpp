@@ -11,7 +11,11 @@ JackAutoconnect::JackAutoconnect(QHash<QRegExp *, QRegExp *>* connectionsToDo, Q
     this->connectionsToDo = connectionsToDo;
 
     // We explicitely want a QueuedConnection since we cannot connect ports in the callback/notification-thread
-    connect(this, SIGNAL(newPort()), this, SLOT(doNewPort()), Qt::QueuedConnection);
+    if (this->connectionsToDo == nullptr) {
+        connect(this, SIGNAL(newPort()), this, SLOT(doNewPortJackTripSuperCollider()), Qt::QueuedConnection);
+    } else {
+        connect(this, SIGNAL(newPort()), this, SLOT(doNewPort()), Qt::QueuedConnection);
+    }
 
     jack_set_port_registration_callback(client, &myRegCallback_static, (void*)this);
 
@@ -83,4 +87,91 @@ void JackAutoconnect::doNewPort()
             }
         }
     }
+}
+
+void JackAutoconnect::doNewPortJackTripSuperCollider()
+{
+    static const unsigned int CHANNELS = 2;
+    static const QString JT_RECEIVE(":receive_");
+    static const QString JT_SEND(":send_");
+    static const QString JT_RECEIVE_RX(".*:receive_.*");
+    static const QString JT_SEND_RX(".*:send_.*");
+    static const QString SC_IN("SuperCollider:in_");
+    static const QString SC_OUT("SuperCollider:out_");
+
+    const char ** outPorts;
+    const char ** inPorts;
+    long unsigned int i = 0;
+
+    qDebug() << "Connecting JackTrip clients to SuperCollider";
+
+    // Iterate over all output ports that match JackTrip receive pattern
+    outPorts = jack_get_ports(client, JT_RECEIVE_RX.toUtf8().constData(), NULL, JackPortIsOutput);
+    for (i = 0; outPorts[i]; ++i)
+    {
+        const QString clientPortName(outPorts[i]);
+        //qDebug() << "Found output port: " << clientPortName;
+
+        // extract client name from connection name
+        const int receiveIdx = clientPortName.indexOf(JT_RECEIVE);
+        const QString clientName(clientPortName.left(receiveIdx));
+
+        // remember client next time around
+        const int clientNum = getClientNum(clientName);
+
+        // extract client channel number
+        const int clientChannelDigits = clientPortName.size() - (receiveIdx + JT_RECEIVE.size());
+        const int clientChannelNum = clientPortName.right(clientChannelDigits).toUInt();
+
+        // determine server channel number and port name
+        const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
+        const QString serverPortName(SC_IN + QString::number(serverChannelNum));
+
+        //qDebug() << "Connecting output port " << clientPortName << " to " << serverPortName;
+
+        // We don't even check if the ports are connected yet, we just tell jack to connect them and even ignore the return value
+        jack_connect(client, clientPortName.toUtf8().constData(), serverPortName.toUtf8().constData());
+    }
+    free(outPorts);
+
+    // Iterate over all input ports that match JackTrip send pattern
+    inPorts = jack_get_ports(client, JT_SEND_RX.toUtf8().constData(), NULL, JackPortIsInput);
+    for (i = 0; inPorts[i]; ++i)
+    {
+        const QString clientPortName(inPorts[i]);
+        //qDebug() << "Found input port: " << clientPortName;
+
+        // extract client name from connection name
+        const int sendIdx = clientPortName.indexOf(JT_SEND);
+        const QString clientName(clientPortName.left(sendIdx));
+
+        // remember client next time around
+        const int clientNum = getClientNum(clientName);
+
+        // extract client channel number
+        const int clientChannelDigits = clientPortName.size() - (sendIdx + JT_SEND.size());
+        const int clientChannelNum = clientPortName.right(clientChannelDigits).toUInt();
+
+        // determine server channel number and port name
+        const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
+        const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
+
+        //qDebug() << "Connecting input port " << clientPortName << " to " << serverPortName;
+
+        // We don't even check if the ports are connected yet, we just tell jack to connect them and even ignore the return value
+        jack_connect(client,  serverPortName.toUtf8().constData(), clientPortName.toUtf8().constData());
+    }
+    free(inPorts);
+}
+
+int JackAutoconnect::getClientNum(const QString& clientName)
+{
+    QHash<QString, int>::const_iterator i = this->knownClients.find(clientName);
+    if (i != this->knownClients.end()) {
+        return i.value();
+    }
+    
+    const int clientNum = this->knownClients.size();
+    this->knownClients.insert(clientName, clientNum);
+    return clientNum;
 }

@@ -18,11 +18,17 @@ public:
     static void myRegCallback_static(jack_port_id_t port, int action, void *arg);
 
 private:
-        // The RegEx pairs of port names to connect
+    // The RegEx pairs of port names to connect
     QHash<QRegExp*, QRegExp*>* connectionsToDo;
+
+    // Hash map of clients that we have seen before
+    QHash<QString, int> knownClients;
 
     // Our jack client handle
     jack_client_t* client;
+
+    // returns auto incrementing number for each unique client
+    int getClientNum(const QString& clientName);
 
 signals:
     // Will be emitted every time a new port has been registered with jack
@@ -32,6 +38,8 @@ public slots:
     // Main worker method that iterates through all entries in connectionsToDo
     void doNewPort();
 
+    // Main worker method that connects JackTrip clients to SuperCollider server
+    void doNewPortJackTripSuperCollider();
 };
 
 #endif // JACKAUTOCONNECT_H
