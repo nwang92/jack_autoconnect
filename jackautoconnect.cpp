@@ -8,6 +8,7 @@ JackAutoconnect::JackAutoconnect(QHash<QRegExp *, QRegExp *>* connectionsToDo, Q
         qCritical() << "Unable to connect to jack server :( Exiting ...";
     }
 
+    this->knownClients.insert("Jamulus", 0);    // ensure Jamulus is always client 0
     this->connectionsToDo = connectionsToDo;
 
     // We explicitely want a QueuedConnection since we cannot connect ports in the callback/notification-thread
@@ -39,6 +40,21 @@ void JackAutoconnect::doNewPort()
         connectJamulusSuperCollider();
     } else {
         connectRegex();
+    }
+}
+
+void JackAutoconnect::connectJack(const QString& src, const QString& dst)
+{
+    int n = jack_connect(this->client, src.toUtf8().constData(), dst.toUtf8().constData());
+    switch (n) {
+    case 0:
+        qDebug() << "Connected output port " << src << " to " << dst;
+        break;
+    case EEXIST:
+        //qDebug() << "Already connected output port " << src << " to " << dst;
+        break;
+    default:
+        qWarning() << "Failed to connect output port " << src << " to " << dst;
     }
 }
 
@@ -85,9 +101,7 @@ void JackAutoconnect::connectRegex()
                     if ((connectionsToDo->value(expr)->indexIn(existingInPort)) != -1)
                     {
                         qDebug() << "Got matching inputPort:" << existingInPort << "CONNECT!";
-
-                        // We don't even check if the ports are connected yet, we just tell jack to connect them and even ignore the return value
-                        jack_connect(client, existingOutPort.toUtf8().constData(), existingInPort.toUtf8().constData());
+                        connectJack(existingOutPort, existingInPort);
                     }
                 }
             }
@@ -109,7 +123,7 @@ void JackAutoconnect::connectJackTripSuperCollider()
     const char ** inPorts;
     long unsigned int i = 0;
 
-    qDebug() << "Connecting JackTrip clients to SuperCollider";
+    //qDebug() << "Connecting JackTrip clients to SuperCollider";
 
     // Iterate over all output ports that match JackTrip receive pattern
     outPorts = jack_get_ports(this->client, JT_RECEIVE_RX.toUtf8().constData(), NULL, JackPortIsOutput);
@@ -134,10 +148,7 @@ void JackAutoconnect::connectJackTripSuperCollider()
             const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
             const QString serverPortName(SC_IN + QString::number(serverChannelNum));
 
-            //qDebug() << "Connecting output port " << clientPortName << " to " << serverPortName;
-
-            // We don't even check if the ports are connected yet, we just tell jack to connect them and even ignore the return value
-            jack_connect(this->client, clientPortName.toUtf8().constData(), serverPortName.toUtf8().constData());
+            connectJack(clientPortName, serverPortName);
         }
         free(outPorts);
     }
@@ -165,10 +176,7 @@ void JackAutoconnect::connectJackTripSuperCollider()
             const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
             const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
 
-            //qDebug() << "Connecting input port " << clientPortName << " to " << serverPortName;
-
-            // We don't even check if the ports are connected yet, we just tell jack to connect them and even ignore the return value
-            jack_connect(this->client, serverPortName.toUtf8().constData(), clientPortName.toUtf8().constData());
+            connectJack(serverPortName, clientPortName);
         }
         free(inPorts);
     }
@@ -193,8 +201,7 @@ void JackAutoconnect::connectJamulusSuperCollider()
     if (port != nullptr) {
         const int serverChannelNum = (clientNum * CHANNELS) + 1;
         const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
-        qDebug() << "Connecting input port " << JAMULUS_INPUT_LEFT << " to " << serverPortName;
-        jack_connect(this->client, serverPortName.toUtf8().constData(), JAMULUS_INPUT_LEFT.toUtf8().constData());
+        connectJack(serverPortName, JAMULUS_INPUT_LEFT);
     }
 
     // connect Jamulus input right
@@ -202,8 +209,7 @@ void JackAutoconnect::connectJamulusSuperCollider()
     if (port != nullptr) {
         const int serverChannelNum = (clientNum * CHANNELS) + 2;
         const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
-        qDebug() << "Connecting input port " << JAMULUS_INPUT_RIGHT << " to " << serverPortName;
-        jack_connect(this->client, serverPortName.toUtf8().constData(), JAMULUS_INPUT_RIGHT.toUtf8().constData());
+        connectJack(serverPortName, JAMULUS_INPUT_RIGHT);
     }
 
     // connect Jamulus output left
@@ -211,8 +217,7 @@ void JackAutoconnect::connectJamulusSuperCollider()
     if (port != nullptr) {
         const int serverChannelNum = (clientNum * CHANNELS) + 1;
         const QString serverPortName(SC_IN + QString::number(serverChannelNum));
-        qDebug() << "Connecting output port " << JAMULUS_OUTPUT_LEFT << " to " << serverPortName;
-        jack_connect(this->client, JAMULUS_OUTPUT_LEFT.toUtf8().constData(), serverPortName.toUtf8().constData());
+        connectJack(JAMULUS_OUTPUT_LEFT, serverPortName);
     }
 
     // connect Jamulus output right
@@ -220,8 +225,7 @@ void JackAutoconnect::connectJamulusSuperCollider()
     if (port != nullptr) {
         const int serverChannelNum = (clientNum * CHANNELS) + 2;
         const QString serverPortName(SC_IN + QString::number(serverChannelNum));
-        qDebug() << "Connecting output port " << JAMULUS_OUTPUT_RIGHT << " to " << serverPortName;
-        jack_connect(this->client, JAMULUS_OUTPUT_RIGHT.toUtf8().constData(), serverPortName.toUtf8().constData());
+        connectJack(JAMULUS_OUTPUT_RIGHT, serverPortName);
     }
 }
 

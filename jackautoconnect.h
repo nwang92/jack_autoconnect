@@ -27,6 +27,9 @@ private:
     // Our jack client handle
     jack_client_t* client;
 
+    // connects jack output connection (src) to jack input connection (dst)
+    void connectJack(const QString& src, const QString& dst);
+
     // Main worker method that connects RegEx pairs
     void connectRegex();
 
