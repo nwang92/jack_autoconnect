@@ -51,7 +51,7 @@ void JackAutoconnect::connectJack(const QString& src, const QString& dst)
         qDebug() << "Connected output port " << src << " to " << dst;
         break;
     case EEXIST:
-        //qDebug() << "Already connected output port " << src << " to " << dst;
+        qDebug() << "Already connected output port " << src << " to " << dst;
         break;
     default:
         qWarning() << "Failed to connect output port " << src << " to " << dst;
@@ -118,7 +118,10 @@ void JackAutoconnect::connectJackTripSuperCollider()
     static const QString JT_SEND_RX(".*:send_.*");
     static const QString SC_IN("SuperCollider:in_");
     static const QString SC_OUT("SuperCollider:out_");
+    static const QString SN_IN("supernova:input_");
+    static const QString SN_OUT("supernova:output_");
 
+    jack_port_t *port;
     const char ** outPorts;
     const char ** inPorts;
     long unsigned int i = 0;
@@ -146,9 +149,19 @@ void JackAutoconnect::connectJackTripSuperCollider()
 
             // determine server channel number and port name
             const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
-            const QString serverPortName(SC_IN + QString::number(serverChannelNum));
+            QString serverPortName(SC_IN + QString::number(serverChannelNum));
+            port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+            if (port == nullptr) {
+                serverPortName = SN_IN + QString::number(serverChannelNum);
+                port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+            }
 
-            connectJack(clientPortName, serverPortName);
+            // check if already connected first
+            if (port != nullptr) {
+                if (!jack_port_connected_to(port, clientPortName.toUtf8().constData())) {
+                    connectJack(clientPortName, serverPortName);
+                }
+            }
         }
         free(outPorts);
     }
@@ -174,9 +187,19 @@ void JackAutoconnect::connectJackTripSuperCollider()
 
             // determine server channel number and port name
             const int serverChannelNum = (clientNum * CHANNELS) + clientChannelNum;
-            const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
+            QString serverPortName(SC_OUT + QString::number(serverChannelNum));
+            port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+            if (port == nullptr) {
+                serverPortName = SN_OUT + QString::number(serverChannelNum);
+                port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+            }
 
-            connectJack(serverPortName, clientPortName);
+            // check if already connected first
+            if (port != nullptr) {
+                if (!jack_port_connected_to(port, clientPortName.toUtf8().constData())) {
+                    connectJack(serverPortName, clientPortName);
+                }
+            }
         }
         free(inPorts);
     }
@@ -191,40 +214,57 @@ void JackAutoconnect::connectJamulusSuperCollider()
     static const QString JAMULUS_OUTPUT_RIGHT("Jamulus:output right");
     static const QString SC_IN("SuperCollider:in_");
     static const QString SC_OUT("SuperCollider:out_");
+    static const QString SN_IN("supernova:input_");
+    static const QString SN_OUT("supernova:output_");
+
     jack_port_t *port;
 
     // remember client next time around
     const int clientNum = getClientNum("Jamulus");
+    const int leftChannelNum = (clientNum * CHANNELS) + 1;
+    const int rightChannelNum = (clientNum * CHANNELS) + 2;
 
     // connect Jamulus input left
-    port = jack_port_by_name(this->client, JAMULUS_INPUT_LEFT.toUtf8().constData());
-    if (port != nullptr) {
-        const int serverChannelNum = (clientNum * CHANNELS) + 1;
-        const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
+    QString serverPortName(SC_OUT + QString::number(leftChannelNum));
+    port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    if (port == nullptr) {
+        serverPortName = SN_OUT + QString::number(leftChannelNum);
+        port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    }
+    if (port != nullptr && !jack_port_connected_to(port, JAMULUS_INPUT_LEFT.toUtf8().constData())) {
         connectJack(serverPortName, JAMULUS_INPUT_LEFT);
     }
 
     // connect Jamulus input right
-    port = jack_port_by_name(this->client, JAMULUS_INPUT_RIGHT.toUtf8().constData());
-    if (port != nullptr) {
-        const int serverChannelNum = (clientNum * CHANNELS) + 2;
-        const QString serverPortName(SC_OUT + QString::number(serverChannelNum));
+    serverPortName = (SC_OUT + QString::number(rightChannelNum));
+    port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    if (port == nullptr) {
+        serverPortName = SN_OUT + QString::number(rightChannelNum);
+        port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    }
+    if (port != nullptr && !jack_port_connected_to(port, JAMULUS_INPUT_RIGHT.toUtf8().constData())) {
         connectJack(serverPortName, JAMULUS_INPUT_RIGHT);
     }
 
     // connect Jamulus output left
-    port = jack_port_by_name(this->client, JAMULUS_OUTPUT_LEFT.toUtf8().constData());
-    if (port != nullptr) {
-        const int serverChannelNum = (clientNum * CHANNELS) + 1;
-        const QString serverPortName(SC_IN + QString::number(serverChannelNum));
+    serverPortName = (SC_IN + QString::number(leftChannelNum));
+    port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    if (port == nullptr) {
+        serverPortName = SN_IN + QString::number(leftChannelNum);
+        port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    }
+    if (port != nullptr && !jack_port_connected_to(port, JAMULUS_OUTPUT_LEFT.toUtf8().constData())) {
         connectJack(JAMULUS_OUTPUT_LEFT, serverPortName);
     }
 
     // connect Jamulus output right
-    port = jack_port_by_name(this->client, JAMULUS_OUTPUT_RIGHT.toUtf8().constData());
-    if (port != nullptr) {
-        const int serverChannelNum = (clientNum * CHANNELS) + 2;
-        const QString serverPortName(SC_IN + QString::number(serverChannelNum));
+    serverPortName = (SC_IN + QString::number(rightChannelNum));
+    port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    if (port == nullptr) {
+        serverPortName = SN_IN + QString::number(rightChannelNum);
+        port = jack_port_by_name(this->client, serverPortName.toUtf8().constData());
+    }
+    if (port != nullptr && !jack_port_connected_to(port, JAMULUS_OUTPUT_RIGHT.toUtf8().constData())) {
         connectJack(JAMULUS_OUTPUT_RIGHT, serverPortName);
     }
 }
