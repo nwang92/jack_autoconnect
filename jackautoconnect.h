@@ -5,6 +5,7 @@
 #include <QDebug>
 #include <QRegExp>
 #include <QHash>
+#include <QAtomicInteger>
 #include <jack/jack.h>
 
 class JackAutoconnect : public QObject
@@ -26,6 +27,12 @@ private:
 
     // Our jack client handle
     jack_client_t* client;
+
+    // number of active signals being processed
+    QAtomicInteger<int> triggers;
+
+    // set to true after all jamulus connections are completed
+    bool jamulusConnected;
 
     // connects jack output connection (src) to jack input connection (dst)
     void connectJack(const QString& src, const QString& dst);

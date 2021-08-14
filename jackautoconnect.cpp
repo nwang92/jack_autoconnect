@@ -1,7 +1,8 @@
 #include "jackautoconnect.h"
+#include <unistd.h>
 
 JackAutoconnect::JackAutoconnect(QHash<QRegExp *, QRegExp *>* connectionsToDo, QObject *parent) :
-    QObject(parent)
+    QObject(parent), triggers(0)
 {
     if ((client = jack_client_open("autoconnect", JackNoStartServer, 0)) == 0)
     {
@@ -29,18 +30,39 @@ void JackAutoconnect::myRegCallback_static(jack_port_id_t port, int action, void
         return;
     }
 
-    // Emit the signal so that the main thread will check the ports and connect them
-    emit ((JackAutoconnect*) arg)->newPort();
+    // Only fire the signal if this is #1
+    JackAutoconnect *ptr = (JackAutoconnect*) arg;
+    if (++ptr->triggers == 1) {
+        // Emit the signal so that the main thread will check the ports and connect them
+        emit ptr->newPort();
+    }
 }
 
 void JackAutoconnect::doNewPort()
 {
-    if (this->connectionsToDo == nullptr) {
-        connectJackTripSuperCollider();
-        connectJamulusSuperCollider();
-    } else {
-        connectRegex();
-    }
+    int newTriggers;
+
+    // reset triggers to mark starting point
+    triggers = 0;
+
+    do {
+
+        qDebug() << "Scanning ports to connect";
+
+        if (this->connectionsToDo == nullptr) {
+            connectJackTripSuperCollider();
+            connectJamulusSuperCollider();
+        } else {
+            connectRegex();
+        }
+
+        // sleep to prevent this from running too frequently
+        ::sleep(1);
+
+        // check if any new triggers since before we started
+        newTriggers = triggers.fetchAndStoreAcquire(0);
+
+    } while (newTriggers != 0);
 }
 
 void JackAutoconnect::connectJack(const QString& src, const QString& dst)
@@ -54,6 +76,7 @@ void JackAutoconnect::connectJack(const QString& src, const QString& dst)
         qDebug() << "Already connected output port " << src << " to " << dst;
         break;
     default:
+        ++triggers; // ensure it will try running again
         qWarning() << "Failed to connect output port " << src << " to " << dst;
     }
 }
@@ -216,6 +239,16 @@ void JackAutoconnect::connectJamulusSuperCollider()
     static const QString SC_OUT("SuperCollider:out_");
     static const QString SN_IN("supernova:input_");
     static const QString SN_OUT("supernova:output_");
+
+    // return early if Jamulus ports are not active
+    if (jack_port_by_name(this->client, JAMULUS_INPUT_LEFT.toUtf8().constData()) == NULL
+        || jack_port_by_name(this->client, JAMULUS_INPUT_RIGHT.toUtf8().constData()) == NULL
+        || jack_port_by_name(this->client, JAMULUS_OUTPUT_LEFT.toUtf8().constData()) == NULL
+        || jack_port_by_name(this->client, JAMULUS_OUTPUT_RIGHT.toUtf8().constData()) == NULL)
+    {
+        qDebug() << "Jamulus ports not found";
+        return;
+    }
 
     jack_port_t *port;
 
