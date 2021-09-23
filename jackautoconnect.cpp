@@ -4,6 +4,7 @@
 JackAutoconnect::JackAutoconnect(QHash<QRegExp *, QRegExp *>* connectionsToDo, QObject *parent) :
     QObject(parent), triggers(0)
 {
+    qDebug() << "JackNoStartServer is: " << JackNoStartServer;
     if ((client = jack_client_open("autoconnect", JackNoStartServer, 0)) == 0)
     {
         qCritical() << "Unable to connect to jack server :( Exiting ...";
@@ -152,12 +153,13 @@ void JackAutoconnect::connectJackTripSuperCollider()
     //qDebug() << "Connecting JackTrip clients to SuperCollider";
 
     // Iterate over all output ports that match JackTrip receive pattern
+    qDebug() << "JackPortIsOutput is: " << JackPortIsOutput;
     outPorts = jack_get_ports(this->client, JT_RECEIVE_RX.toUtf8().constData(), NULL, JackPortIsOutput);
     if (outPorts != nullptr) {
         for (i = 0; outPorts[i]; ++i)
         {
             const QString clientPortName(outPorts[i]);
-            //qDebug() << "Found output port: " << clientPortName;
+            qDebug() << "Found output port: " << clientPortName;
 
             // extract client name from connection name
             const int receiveIdx = clientPortName.indexOf(JT_RECEIVE);
@@ -189,13 +191,14 @@ void JackAutoconnect::connectJackTripSuperCollider()
         free(outPorts);
     }
 
+    qDebug() << "JackPortIsOutput is: " << JackPortIsInput;
     // Iterate over all input ports that match JackTrip send pattern
     inPorts = jack_get_ports(this->client, JT_SEND_RX.toUtf8().constData(), NULL, JackPortIsInput);
     if (inPorts != nullptr) {
         for (i = 0; inPorts[i]; ++i)
         {
             const QString clientPortName(inPorts[i]);
-            //qDebug() << "Found input port: " << clientPortName;
+            qDebug() << "Found input port: " << clientPortName;
 
             // extract client name from connection name
             const int sendIdx = clientPortName.indexOf(JT_SEND);
